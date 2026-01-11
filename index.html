@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>PSA Source Engine</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root { --primary: #00ffcc; --accent: #ff007b; --bg: #0a0f1a; --glass: rgba(16, 30, 45, 0.95); }
+        body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #game-container { position: relative; border: 2px solid #1e293b; background: #000; box-shadow: 0 0 50px rgba(0,0,0,0.5); overflow: hidden; }
+        #ui-layer {
+            position: absolute; top: 15px; left: 15px; background: var(--glass); padding: 15px; 
+            border-radius: 10px; border: 1px solid var(--primary); z-index: 10; min-width: 250px; pointer-events: none;
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
+            border: 2px solid var(--primary); border-radius: 50%; transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 5; box-shadow: 0 0 10px var(--primary);
+        }
+        .menu {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: var(--glass); border: 2px solid var(--primary); padding: 25px;
+            text-align: center; border-radius: 15px; z-index: 20; width: 450px; max-height: 90vh; overflow-y: auto;
+        }
+        .stat-line { display: flex; justify-content: space-between; margin-bottom: 5px; font-family: monospace; font-size: 0.9rem; }
+        button {
+            background: var(--primary); color: #000; border: none; padding: 12px;
+            margin-top: 10px; cursor: pointer; font-weight: 800; border-radius: 5px; text-transform: uppercase; width: 100%;
+        }
+        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; }
+        label { font-size: 0.75rem; color: var(--primary); text-transform: uppercase; }
+        input, select {
+            width: 100%; padding: 8px; margin: 4px 0 10px 0; background: #000; color: #fff; 
+            border: 1px solid #334155; border-radius: 4px; box-sizing: border-box;
+        }
+        #progress-bar { position: absolute; bottom: 0; left: 0; height: 6px; background: var(--accent); width: 0%; transition: width 0.1s linear; }
+        #calib-overlay { display: none; position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: var(--accent); padding: 20px 40px; border-radius: 5px; font-weight: bold; z-index: 100; box-shadow: 0 0 30px var(--accent); text-align: center; border: 2px solid white; }
+        .lang-select { position: absolute; top: 10px; right: 10px; width: auto; }
+        
+        /* Стили для социальных кнопок */
+        .social-links { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin: 15px 0; }
+        .social-links a { transition: transform 0.2s; }
+        .social-links a:hover { transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="crosshair"></div>
+        <div id="progress-bar"></div>
+        <div id="ui-layer">
+            <div class="stat-line"><span id="txt-iter-label">Итерация</span>: <span id="iter-val">1 / 7</span></div>
+            <div class="stat-line">CS2 Sens: <span id="sens-display">1.00</span></div>
+            <div class="stat-line"><span id="txt-dist-label">Дистанция</span>: <span id="cm-display">0.00</span> <span id="txt-cm-unit">см/360</span></div>
+            <div class="stat-line"><span id="txt-score-label">Очки</span>: <span id="score">0</span></div>
+        </div>
+    </div>
+
+    <div id="calib-overlay"></div>
+
+    <div id="start-menu" class="menu">
+        <select id="lang-picker" class="lang-select" onchange="setLanguage(this.value)">
+            <option value="en">EN</option>
+            <option value="ru">RU</option>
+            <option value="tr">TR</option>
+            <option value="uk">UA</option>
+        </select>
+
+        <h2 id="txt-title" style="margin: 0 0 15px 0; color: var(--primary);">PSA Source Engine</h2>
+        
+        <label id="txt-res-label">Разрешение вручную (Ш x В)</label>
+        <div class="settings-grid">
+            <input type="number" id="res-w" value="1280">
+            <input type="number" id="res-h" value="720">
+        </div>
+
+        <div class="settings-grid">
+            <div><label id="txt-dpi-label">DPI Мыши</label><input type="number" id="dpi-input" value="800"></div>
+            <div><label id="txt-fov-label">FOV (CS2=90)</label><input type="number" id="fov-input" value="90"></div>
+        </div>
+        
+        <div style="border: 1px dashed var(--primary); padding: 15px; margin: 15px 0; border-radius: 8px;">
+            <label id="txt-base-label">Базовая чувствительность (Source)</label>
+            <input type="number" id="base-sens-input" value="1.20" step="0.001">
+            <button id="calib-btn" style="background: transparent; color: var(--primary); border: 1px solid var(--primary);">Метод Б: Настроить через 360°</button>
+        </div>
+
+        <div class="social-links">
+            <a href="https://github.com/Adiru3" target="_blank"><img src="https://img.shields.io/badge/GitHub-Adiru3-181717?style=for-the-badge&logo=github" alt="GitHub"></a>
+            <a href="https://www.youtube.com/@adiruaim" target="_blank"><img src="https://img.shields.io/badge/YouTube-@adiruaim-FF0000?style=for-the-badge&logo=youtube" alt="YouTube"></a>
+            <a href="https://www.tiktok.com/@adiruhs" target="_blank"><img src="https://img.shields.io/badge/TikTok-@adiruhs-000000?style=for-the-badge&logo=tiktok" alt="TikTok"></a>
+            <a href="https://donatello.to/Adiru3" target="_blank"><img src="https://img.shields.io/badge/Support-Donatello-orange?style=for-the-badge" alt="Donatello"></a>
+        </div>
+        
+        <button id="start-btn" style="font-size: 1.1rem; background: var(--primary);">Запустить PSA тест</button>
+    </div>
+
+    <script>
+        const i18n = {
+            ru: {
+                title: "PSA Source Engine",
+                res: "Разрешение (Ш x В)",
+                dpi: "DPI Мыши",
+                fov: "FOV (CS2=90)",
+                base: "Базовая чувствительность (Source)",
+                calibBtn: "Метод Б: Настроить через 360°, поставьте мышь на угол коврика",
+                startBtn: "Запустить PSA тест, Нажмите F11 Для Полноэкранного режима",
+                iter: "Итерация",
+                dist: "Дистанция",
+                cm: "см/360",
+                score: "Очки",
+                calibOverlay: "МЕТОД Б: КАЛИБРОВКА<br><br>ТЯНИТЕ МЫШЬ В ПРОТИВОПОЛОЖНЫЙ УГОЛ НА КОВРИКЕ <br>И НАЖМИТЕ ESC",
+                finalTitle: "ИДЕАЛЬНАЯ СЕНСА НАЙДЕНА",
+                finalSens: "Настройка для CS2:",
+                finalPhys: "Физически:",
+                correction: "🎯 ФИНАЛЬНАЯ КОРРЕКТИРОВКА В ИГРЕ:",
+                over: "Перелет (Overshooting): Если при резком флике прицел улетает за врага — снизь результат на 0.05–0.1.",
+                under: "Недолет (Undershooting): Если рука «вязнет» и ты не доводишь до головы — подними результат на 0.05–0.1.",
+                restart: "Начать новый тест"
+            },
+            en: {
+                title: "PSA Source Engine",
+                res: "Manual Resolution (W x H)",
+                dpi: "Mouse DPI",
+                fov: "FOV (CS2=90)",
+                base: "Base Sensitivity (Source)",
+                calibBtn: "Method B: Calibrate via 360°, place mouse at mat edge",
+                startBtn: "Start PSA Test, Press F11 For FullScreen",
+                iter: "Iteration",
+                dist: "Distance",
+                cm: "cm/360",
+                score: "Score",
+                calibOverlay: "METHOD B: CALIBRATION<br><br>DRAG MOUSE TO THE OPPOSITE EDGE OF THE MAT <br>AND PRESS ESC",
+                finalTitle: "PERFECT SENS FOUND",
+                finalSens: "CS2 Setting:",
+                finalPhys: "Physical:",
+                correction: "🎯 FINAL IN-GAME CORRECTION:",
+                over: "Overshooting: If you flick past the target — lower result by 0.05–0.1.",
+                under: "Undershooting: If your aim feels sluggish/short — raise result by 0.05–0.1.",
+                restart: "Restart Test"
+            },
+            tr: {
+                title: "PSA Source Motoru",
+                res: "Manuel Çözünürlük (G x Y)",
+                dpi: "Fare DPI",
+                fov: "FOV (CS2=90)",
+                base: "Temel Hassasiyet (Source)",
+                calibBtn: "Yöntem B: 360° ile ayarla, fareyi matın köşesine koy",
+                startBtn: "PSA Testini Başlat, F11 tuşuna basarak tam ekran moduna geçin.",
+                iter: "İterasyon",
+                dist: "Mesafe",
+                cm: "cm/360",
+                score: "Puan",
+                calibOverlay: "YÖNTEM B: KALİBRASYON<br><br>FAREYİ MATIN DİĞER KÖŞESİNE ÇEKİN <br>VE ESC TUŞUNA BASIN",
+                finalTitle: "MÜKEMMEL HASSASİYET BULUNDU",
+                finalSens: "CS2 Ayarı:",
+                finalPhys: "Fiziksel:",
+                correction: "🎯 OYUN İÇİ SON DÜZELTME:",
+                over: "Hedefi Aşma (Overshooting): Hedefi geçiyorsanız — sonucu 0.05–0.1 azaltın.",
+                under: "Hedefe Ulaşamama (Undershooting): Hedefe yetişemiyorsanız — sonucu 0.05–0.1 artırın.",
+                restart: "Yeni Test Başlat"
+            },
+            uk: {
+                title: "PSA Source Engine",
+                res: "Роздільна здатність (Ш x В)",
+                dpi: "DPI Миші",
+                fov: "FOV (CS2=90)",
+                base: "Базова чутливість (Source)",
+                calibBtn: "Метод Б: Налаштувати через 360°, поставте мишу на кут килимка",
+                startBtn: "Запустити PSA тест",
+                iter: "Ітерація",
+                dist: "Дистанція",
+                cm: "см/360",
+                score: "Очки",
+                calibOverlay: "МЕТОД Б: КАЛІБРУВАННЯ<br><br>ТЯГНІТЬ МИШУ В ПРОТИЛЕЖНИЙ КУТ КИЛИМКА <br>ТА НАТИСНІТЬ ESC",
+                finalTitle: "ІДЕАЛЬНУ СЕНСУ ЗНАЙДЕНО",
+                finalSens: "Налаштування для CS2, Нажміть F11 Для Повноекранного режима:",
+                finalPhys: "Фізично:",
+                correction: "🎯 ФІНАЛЬНЕ КОРЕГУВАННЯ В ГРІ:",
+                over: "Переліт (Overshooting): Якщо при різкому фліку приціл летить далі ворога — знизьте результат на 0.05–0.1.",
+                under: "Недоліт (Undershooting): Якщо рука «в'язне» і ви не доводите до голови — підніміть результат на 0.05–0.1.",
+                restart: "Почати новий тест"
+            }
+        };
+
+        let currentLang = 'ru';
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            const t = i18n[lang];
+            document.getElementById('txt-title').innerText = t.title;
+            document.getElementById('txt-res-label').innerText = t.res;
+            document.getElementById('txt-dpi-label').innerText = t.dpi;
+            document.getElementById('txt-fov-label').innerText = t.fov;
+            document.getElementById('txt-base-label').innerText = t.base;
+            document.getElementById('calib-btn').innerText = t.calibBtn;
+            document.getElementById('start-btn').innerText = t.startBtn;
+            document.getElementById('txt-iter-label').innerText = t.iter;
+            document.getElementById('txt-dist-label').innerText = t.dist;
+            document.getElementById('txt-cm-unit').innerText = t.cm;
+            document.getElementById('txt-score-label').innerText = t.score;
+            document.getElementById('calib-overlay').innerHTML = t.calibOverlay;
+            document.getElementById('lang-picker').value = lang;
+        }
+
+        const userLang = navigator.language.substring(0, 2);
+        if (i18n[userLang]) setLanguage(userLang);
+        else setLanguage('en');
+
+        let scene, camera, renderer, target;
+        let score = 0, baseSens, dpi, fov;
+        let pitch = 0, yaw = 0, movementTotal = 0;
+        let currentIteration = 1;
+        let isCalibrating = false;
+        let currentSens = 1.0;
+        let flickTimer;
+        const CS2_YAW = 0.022;
+
+        function calcCm360(s) {
+            const d = parseFloat(document.getElementById('dpi-input').value) || 800;
+            return (360 * 2.54) / (s * d * CS2_YAW);
+        }
+
+        function initRenderer() {
+            if (renderer) {
+                renderer.domElement.remove();
+                renderer.dispose();
+            }
+            const container = document.getElementById('game-container');
+            const w = parseInt(document.getElementById('res-w').value);
+            const h = parseInt(document.getElementById('res-h').value);
+            
+            container.style.width = w + 'px';
+            container.style.height = h + 'px';
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050a14);
+            camera = new THREE.PerspectiveCamera(parseInt(document.getElementById('fov-input').value), w / h, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(w, h);
+            container.appendChild(renderer.domElement);
+            
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            const light = new THREE.PointLight(0x00ffcc, 1, 100);
+            light.position.set(5, 5, 5);
+            scene.add(light);
+
+            const grid = new THREE.GridHelper(100, 40, 0x1e293b, 0x1e293b);
+            grid.position.y = -1.5;
+            scene.add(grid);
+
+            animate();
+        }
+
+        function handleMouseMove(e) {
+            if (document.pointerLockElement !== renderer.domElement) return;
+            
+            if (isCalibrating) {
+                movementTotal += Math.abs(e.movementX);
+                yaw -= e.movementX * 0.001;
+            } else {
+                const rad = Math.PI / 180;
+                yaw -= e.movementX * CS2_YAW * currentSens * rad;
+                pitch -= e.movementY * CS2_YAW * currentSens * rad;
+                pitch = Math.max(-Math.PI/2.1, Math.min(Math.PI/2.1, pitch));
+            }
+            camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+        }
+
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === null && isCalibrating) {
+                stopCalibration();
+            }
+        });
+
+        function stopCalibration() {
+            isCalibrating = false;
+            document.getElementById('calib-overlay').style.display = 'none';
+            document.getElementById('start-menu').style.display = 'block';
+            
+            if (movementTotal > 100) {
+                const estimatedSens = 360 / (movementTotal * CS2_YAW);
+                document.getElementById('base-sens-input').value = estimatedSens.toFixed(4);
+            }
+            movementTotal = 0;
+        }
+
+        function spawnTarget() {
+            if (target) scene.remove(target);
+            target = new THREE.Mesh(
+                new THREE.SphereGeometry(0.4, 32, 32),
+                new THREE.MeshPhongMaterial({ color: 0xff007b, emissive: 0xff007b, emissiveIntensity: 0.5 })
+            );
+            target.position.set((Math.random()-0.5)*15, Math.random()*5+0.5, -10);
+            scene.add(target);
+            clearTimeout(flickTimer);
+            flickTimer = setTimeout(spawnTarget, 2500); 
+        }
+
+        async function runPSA() {
+            for (let i = 1; i <= 7; i++) {
+                currentIteration = i;
+                document.getElementById('iter-val').innerText = `${i} / 7`;
+                let low = baseSens * (1 - (0.5 / i));
+                let high = baseSens * (1 + (0.5 / i));
+                let scoreLow = await startSingleTest(low, "LOW");
+                let scoreHigh = await startSingleTest(high, "HIGH");
+                baseSens = (scoreLow > scoreHigh) ? (baseSens + low) / 2 : (baseSens + high) / 2;
+            }
+            finishApp();
+        }
+
+        function startSingleTest(s, label) {
+            return new Promise(resolve => {
+                currentSens = s;
+                score = 0;
+                document.getElementById('sens-display').innerText = s.toFixed(3);
+                document.getElementById('cm-display').innerText = calcCm360(s).toFixed(2);
+                spawnTarget();
+                
+                let start = Date.now();
+                let interval = setInterval(() => {
+                    let elapsed = Date.now() - start;
+                    document.getElementById('progress-bar').style.width = (100 - (elapsed/15000*100)) + "%";
+                    if (elapsed >= 15000) {
+                        clearInterval(interval);
+                        resolve(score);
+                    }
+                }, 16);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (target && !isCalibrating && document.pointerLockElement === renderer.domElement) {
+                const time = Date.now() * 0.002;
+                target.position.x += Math.sin(time) * 0.07;
+                target.position.y += Math.cos(time * 0.7) * 0.05 + Math.sin(time * 1.3) * 0.02;
+                if (target.position.y < 0.5) target.position.y = 0.5;
+
+                const ray = new THREE.Raycaster();
+                ray.setFromCamera({x:0, y:0}, camera);
+                if (target && ray.intersectObject(target).length > 0) score += 5;
+                document.getElementById('score').innerText = Math.floor(score);
+            }
+            if (renderer) renderer.render(scene, camera);
+        }
+
+        function finishApp() {
+            document.exitPointerLock();
+            const finalSens = baseSens;
+            const cm360 = calcCm360(finalSens).toFixed(2);
+            const menu = document.getElementById('start-menu');
+            const t = i18n[currentLang];
+            
+            menu.innerHTML = `
+                <h2 style="color:var(--primary); text-shadow: 0 0 10px var(--primary);">${t.finalTitle}</h2>
+                <div style="background:rgba(0,0,0,0.6); padding:20px; border-radius:10px; border: 1px solid #1e293b; text-align: left;">
+                    <p style="margin: 5px 0;">${t.finalSens} <b style="font-size:1.8rem; color:var(--accent)">${finalSens.toFixed(4)}</b></p>
+                    <p style="margin: 5px 0;">${t.finalPhys} <b style="color:var(--primary)">${cm360} ${t.cm}</b></p>
+                    <div style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; font-size: 0.85rem;">
+                        <b style="color: var(--accent); display: block; margin-bottom: 5px;">${t.correction}</b>
+                        <ul style="padding-left: 20px; margin: 0;">
+                            <li style="margin-bottom: 8px;">${t.over}</li>
+                            <li>${t.under}</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="social-links">
+                    <a href="https://github.com/Adiru3" target="_blank"><img src="https://img.shields.io/badge/GitHub-Adiru3-181717?style=for-the-badge&logo=github" alt="GitHub"></a>
+                    <a href="https://www.youtube.com/@adiruaim" target="_blank"><img src="https://img.shields.io/badge/YouTube-@adiruaim-FF0000?style=for-the-badge&logo=youtube" alt="YouTube"></a>
+                    <a href="https://www.tiktok.com/@adiruhs" target="_blank"><img src="https://img.shields.io/badge/TikTok-@adiruhs-000000?style=for-the-badge&logo=tiktok" alt="TikTok"></a>
+                    <a href="https://donatello.to/Adiru3" target="_blank"><img src="https://img.shields.io/badge/Support-Donatello-orange?style=for-the-badge" alt="Donatello"></a>
+                </div>
+                <button onclick="location.reload()" style="margin-top: 5px;">${t.restart}</button>
+            `;
+            menu.style.display = 'block';
+        }
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mousedown', () => {
+            if (!isCalibrating && target && document.pointerLockElement === renderer.domElement) {
+                const ray = new THREE.Raycaster();
+                ray.setFromCamera({x:0, y:0}, camera);
+                if (ray.intersectObject(target).length > 0) {
+                    score += 1000;
+                    spawnTarget();
+                }
+            }
+        });
+
+        document.getElementById('start-btn').onclick = () => {
+            baseSens = parseFloat(document.getElementById('base-sens-input').value);
+            document.getElementById('start-menu').style.display = 'none';
+            initRenderer();
+            renderer.domElement.requestPointerLock();
+            runPSA();
+        };
+
+        document.getElementById('calib-btn').onclick = () => {
+            isCalibrating = true;
+            movementTotal = 0;
+            document.getElementById('start-menu').style.display = 'none';
+            document.getElementById('calib-overlay').style.display = 'block';
+            initRenderer();
+            renderer.domElement.requestPointerLock();
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isCalibrating) document.exitPointerLock(); 
+        });
+    </script>
+</body>
+</html>
