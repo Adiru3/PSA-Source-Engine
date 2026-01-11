@@ -37,4 +37,9 @@ If the result feels slightly off in a live match, follow these guidelines provid
 * **UI:** Modern CSS3 with Glassmorphism effects.
 
 ---
-**Developed by [Adiru3](https://github.com/Adiru3)**
+## 🔗 Connect & Support
+
+[![GitHub](https://img.shields.io/badge/GitHub-Adiru3-181717?style=for-the-badge&logo=github)](https://github.com/Adiru3)
+[![YouTube](https://img.shields.io/badge/YouTube-@adiruaim-FF0000?style=for-the-badge&logo=youtube)](https://www.youtube.com/@adiruaim)
+[![TikTok](https://img.shields.io/badge/TikTok-@adiruhs-000000?style=for-the-badge&logo=tiktok)](https://www.tiktok.com/@adiruhs)
+[![Donatello](https://img.shields.io/badge/Support-Donatello-orange?style=for-the-badge)](https://donatello.to/Adiru3)
